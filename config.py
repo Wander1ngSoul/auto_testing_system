@@ -19,7 +19,6 @@ import os
 
 load_dotenv()
 
-# Добавьте путь к основному репозиторию в .env или здесь
 MAIN_REPO_PATH = os.getenv('MAIN_REPO_PATH', 'D:/path/to/your/main/project')
 
 def get_git_version():

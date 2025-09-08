@@ -172,7 +172,7 @@ def generate_summary_report(processed_count, errors_count, skipped_count, total_
     print_report(report)
     try:
         wb = openpyxl.load_workbook(excel_file)
-        from summary_report import create_summary_sheet
+        from generators.summary_report import create_summary_sheet
         create_summary_sheet(wb, report)
         wb.save(excel_file)
         logger.info("Итоговый отчет добавлен в Excel файл")
