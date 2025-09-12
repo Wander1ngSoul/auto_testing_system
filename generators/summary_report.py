@@ -46,12 +46,123 @@ def create_summary_sheet(wb, report_data):
             bottom=Side(style='thick', color=COLORS['primary'])
         )
 
-        _fill_report_data(ws, report_data, COLORS, title_font, header_font, normal_font,
-                          bold_font, highlight_font, center_alignment, left_alignment,
-                          right_alignment, thin_border, thick_border)
+        # Заполняем данные отчета
+        current_row = 1
 
+        # Заголовок
+        ws.merge_cells(f'A{current_row}:F{current_row}')
+        title_cell = ws[f'A{current_row}']
+        title_cell.value = "🎯 ИТОГОВЫЙ ОТЧЕТ ТЕСТИРОВАНИЯ"
+        title_cell.font = title_font
+        title_cell.alignment = center_alignment
+        title_cell.fill = PatternFill(start_color=COLORS['header'], end_color=COLORS['header'], fill_type="solid")
+        title_cell.border = thick_border
+        current_row += 1
+
+        # Пустая строка
+        ws.row_dimensions[current_row].height = 5
+        current_row += 1
+
+        # Блок общей информации
+        info_data = [
+            ("Всего тестов", report_data['accuracy']['total_tests'])
+        ]
+        current_row = _create_info_block(ws, current_row, "📊 ОБЩАЯ ИНФОРМАЦИЯ", info_data,
+                                         COLORS, header_font, bold_font, normal_font,
+                                         left_alignment, thin_border)
+
+        current_row += 1
+
+        accuracy_data = [
+            ("📈 Показания", report_data['accuracy']['indications']),
+            ("🔢 Серийные номера", report_data['accuracy']['series']),
+            ("💻 Модели", report_data['accuracy']['model']),
+            ("💰 Тарифы", report_data['accuracy']['rate'])
+        ]
+
+        accuracy_rows = []
+        for label, data in accuracy_data:
+            accuracy_rows.append(
+                (label, f"✓ {data['correct']}/{report_data['accuracy']['total_tests']} ({data['accuracy']:.1f}%)"))
+
+        current_row = _create_info_block(ws, current_row, "🎯 ТОЧНОСТЬ РАСПОЗНАВАНИЯ",
+                                         accuracy_rows, COLORS, header_font, bold_font,
+                                         normal_font, left_alignment, thin_border)
+
+        current_row += 1
+        ws.merge_cells(f'A{current_row}:B{current_row}')
+        ws[f'A{current_row}'] = "🏆 Общая точность:"
+        ws[f'A{current_row}'].font = highlight_font
+        ws[f'A{current_row}'].alignment = left_alignment
+        ws[f'A{current_row}'].border = thin_border
+        ws[f'A{current_row}'].fill = PatternFill(start_color=COLORS['success'], end_color=COLORS['success'],
+                                                 fill_type="solid")
+
+        ws.merge_cells(f'C{current_row}:F{current_row}')
+        accuracy_value = report_data['accuracy']['overall']['accuracy']
+        accuracy_color = COLORS['success'] if accuracy_value >= 80 else COLORS['warning'] if accuracy_value >= 60 else \
+        COLORS['error']
+        ws[f'C{current_row}'] = f"{accuracy_value:.1f}%"
+        ws[f'C{current_row}'].font = Font(bold=True, size=14, color=accuracy_color, name='Calibri')
+        ws[f'C{current_row}'].alignment = center_alignment
+        ws[f'C{current_row}'].border = thin_border
+        ws[f'C{current_row}'].fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+        current_row += 1
+
+        stats_data = [
+            ("📁 Всего файлов", report_data['total_images']),
+            ("✅ Успешно обработано", report_data['successfully_processed']),
+            ("❌ Ошибок", report_data['errors']),
+            ("⏭️ Пропущено", report_data['skipped']),
+            ("🎯 Успешность обработки", f"{report_data['success_rate']:.2f}%"),
+            ("⏱️ Общее время", f"{report_data['total_time_seconds']:.2f} сек"),
+            ("⚡ Среднее время", f"{report_data['average_time_per_image']:.2f} сек/изобр"),
+            ("🚀 Скорость", f"{report_data['images_per_minute']:.2f} изобр/мин")
+        ]
+
+        current_row = _create_info_block(ws, current_row, "📈 СТАТИСТИКА ОБРАБОТКИ",
+                                         stats_data, COLORS, header_font, bold_font,
+                                         normal_font, left_alignment, thin_border)
+
+        current_row += 1
+        ws.merge_cells(f'A{current_row}:B{current_row}')
+        ws[f'A{current_row}'] = "🕒 Завершено:"
+        ws[f'A{current_row}'].font = bold_font
+        ws[f'A{current_row}'].alignment = left_alignment
+        ws[f'A{current_row}'].border = thin_border
+        ws[f'A{current_row}'].fill = PatternFill(start_color=COLORS['header'], end_color=COLORS['header'],
+                                                 fill_type="solid")
+
+        ws.merge_cells(f'C{current_row}:F{current_row}')
+        ws[f'C{current_row}'] = report_data['completion_time']
+        ws[f'C{current_row}'].font = normal_font
+        ws[f'C{current_row}'].alignment = left_alignment
+        ws[f'C{current_row}'].border = thin_border
+        ws[f'C{current_row}'].fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+        _add_outline_border(ws, 1, current_row, 1, 6, thick_border)
+
+        try:
+            from database.db_manager import db_manager
+
+            success = db_manager.save_test_result(report_data)
+            if success:
+                logger.info("✅ Результаты успешно сохранены в базу данных MySQL")
+
+                current_row += 2
+                _add_database_info_section(ws, current_row, COLORS, header_font,
+                                           bold_font, normal_font, left_alignment,
+                                           thin_border, thick_border)
+            else:
+                logger.warning("⚠️ Не удалось сохранить результаты в базу данных")
+
+        except ImportError:
+            logger.warning("Модуль database.db_manager не найден. Пропускаем сохранение в БД.")
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении в базу данных: {e}")
         _adjust_column_widths(ws)
         _adjust_row_heights(ws)
+
 
         _apply_background(ws, COLORS['background'])
 
@@ -63,98 +174,48 @@ def create_summary_sheet(wb, report_data):
         return False
 
 
-def _fill_report_data(ws, report_data, colors, title_font, header_font, normal_font,
-                      bold_font, highlight_font, center_alignment, left_alignment,
-                      right_alignment, thin_border, thick_border):
-    current_row = 1
+def _add_database_info_section(ws, start_row, colors, header_font, bold_font,
+                               normal_font, alignment, thin_border, thick_border):
+    try:
+        from database.db_manager import db_manager
 
-    ws.merge_cells(f'A{current_row}:F{current_row}')
-    title_cell = ws[f'A{current_row}']
-    title_cell.value = "🎯 ИТОГОВЫЙ ОТЧЕТ ТЕСТИРОВАНИЯ"
-    title_cell.font = title_font
-    title_cell.alignment = center_alignment
-    title_cell.fill = PatternFill(start_color=colors['header'], end_color=colors['header'], fill_type="solid")
-    title_cell.border = thick_border
-    current_row += 1
+        ws.merge_cells(f'A{start_row}:F{start_row}')
+        ws[f'A{start_row}'] = "🗄️ ИНФОРМАЦИЯ О БАЗЕ ДАННЫХ"
+        ws[f'A{start_row}'].font = header_font
+        ws[f'A{start_row}'].alignment = Alignment(horizontal='center', vertical='center')
+        ws[f'A{start_row}'].border = thin_border
+        ws[f'A{start_row}'].fill = PatternFill(start_color=colors['header'], end_color=colors['header'],
+                                               fill_type="solid")
+        start_row += 1
+        db_info = [
+            ("📊 База данных", "MySQL 8.0.43"),
+            ("💾 Таблица", "test_results"),
+            ("📅 Всего записей", f"{db_manager.get_total_records()} тестов")
+        ]
 
-    ws.row_dimensions[current_row].height = 5
-    current_row += 1
+        for i, (label, value) in enumerate(db_info):
+            ws.merge_cells(f'A{start_row}:B{start_row}')
+            ws[f'A{start_row}'] = label
+            ws[f'A{start_row}'].font = bold_font
+            ws[f'A{start_row}'].alignment = alignment
+            ws[f'A{start_row}'].border = thin_border
 
-    current_row = _create_info_block(ws, current_row, "📊 ОБЩАЯ ИНФОРМАЦИЯ",
-                                     [("Всего тестов", report_data['accuracy']['total_tests'])],
-                                     colors, header_font, bold_font, normal_font,
-                                     left_alignment, thin_border)
+            fill_color = colors['background'] if i % 2 == 0 else "FFFFFF"
+            ws[f'A{start_row}'].fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
 
-    current_row += 1
+            ws.merge_cells(f'C{start_row}:F{start_row}')
+            ws[f'C{start_row}'] = value
+            ws[f'C{start_row}'].font = normal_font
+            ws[f'C{start_row}'].alignment = alignment
+            ws[f'C{start_row}'].border = thin_border
+            ws[f'C{start_row}'].fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
 
-    accuracy_data = [
-        ("📈 Показания", report_data['accuracy']['indications']),
-        ("🔢 Серийные номера", report_data['accuracy']['series']),
-        ("💻 Модели", report_data['accuracy']['model']),
-        ("💰 Тарифы", report_data['accuracy']['rate'])
-    ]
+            start_row += 1
 
-    accuracy_rows = []
-    for label, data in accuracy_data:
-        accuracy_rows.append(
-            (label, f"✓ {data['correct']}/{report_data['accuracy']['total_tests']} ({data['accuracy']:.1f}%)"))
+        _add_outline_border(ws, start_row - len(db_info) - 1, start_row - 1, 1, 6, thick_border)
 
-    current_row = _create_info_block(ws, current_row, "🎯 ТОЧНОСТЬ РАСПОЗНАВАНИЯ",
-                                     accuracy_rows, colors, header_font, bold_font,
-                                     normal_font, left_alignment, thin_border)
-
-    current_row += 1
-    ws.merge_cells(f'A{current_row}:B{current_row}')
-    ws[f'A{current_row}'] = "🏆 Общая точность:"
-    ws[f'A{current_row}'].font = highlight_font
-    ws[f'A{current_row}'].alignment = left_alignment
-    ws[f'A{current_row}'].border = thin_border
-    ws[f'A{current_row}'].fill = PatternFill(start_color=colors['success'], end_color=colors['success'],
-                                             fill_type="solid")
-
-    ws.merge_cells(f'C{current_row}:F{current_row}')
-    accuracy_value = report_data['accuracy']['overall']['accuracy']
-    accuracy_color = colors['success'] if accuracy_value >= 80 else colors['warning'] if accuracy_value >= 60 else \
-    colors['error']
-    ws[f'C{current_row}'] = f"{accuracy_value:.1f}%"
-    ws[f'C{current_row}'].font = Font(bold=True, size=14, color=accuracy_color, name='Calibri')
-    ws[f'C{current_row}'].alignment = center_alignment
-    ws[f'C{current_row}'].border = thin_border
-    ws[f'C{current_row}'].fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-    current_row += 1
-
-    stats_data = [
-        ("📁 Всего файлов", report_data['total_images']),
-        ("✅ Успешно обработано", report_data['successfully_processed']),
-        ("❌ Ошибок", report_data['errors']),
-        ("⏭️ Пропущено", report_data['skipped']),
-        ("🎯 Успешность обработки", f"{report_data['success_rate']:.2f}%"),
-        ("⏱️ Общее время", f"{report_data['total_time_seconds']:.2f} сек"),
-        ("⚡ Среднее время", f"{report_data['average_time_per_image']:.2f} сек/изобр"),
-        ("🚀 Скорость", f"{report_data['images_per_minute']:.2f} изобр/мин")
-    ]
-
-    current_row = _create_info_block(ws, current_row, "📈 СТАТИСТИКА ОБРАБОТКИ",
-                                     stats_data, colors, header_font, bold_font,
-                                     normal_font, left_alignment, thin_border)
-
-    current_row += 1
-    ws.merge_cells(f'A{current_row}:B{current_row}')
-    ws[f'A{current_row}'] = "🕒 Завершено:"
-    ws[f'A{current_row}'].font = bold_font
-    ws[f'A{current_row}'].alignment = left_alignment
-    ws[f'A{current_row}'].border = thin_border
-    ws[f'A{current_row}'].fill = PatternFill(start_color=colors['header'], end_color=colors['header'],
-                                             fill_type="solid")
-
-    ws.merge_cells(f'C{current_row}:F{current_row}')
-    ws[f'C{current_row}'] = report_data['completion_time']
-    ws[f'C{current_row}'].font = normal_font
-    ws[f'C{current_row}'].alignment = left_alignment
-    ws[f'C{current_row}'].border = thin_border
-    ws[f'C{current_row}'].fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-
-    _add_outline_border(ws, 1, current_row, 1, 6, thick_border)
+    except Exception as e:
+        logger.warning(f"Не удалось добавить информацию о БД: {e}")
 
 
 def _create_info_block(ws, start_row, title, data, colors, header_font, bold_font,
@@ -201,9 +262,10 @@ def _adjust_column_widths(ws):
 
 def _adjust_row_heights(ws):
     for row in range(1, ws.max_row + 1):
-        if row == 1:  # Заголовок
+        if row == 1:
             ws.row_dimensions[row].height = 30
-        elif any(cell.value and '🚀' in str(cell.value) for cell in ws[row]):  # Заголовки блоков
+        elif any(cell.value and any(icon in str(cell.value) for icon in ['📊', '🎯', '📈', '🗄️']) for cell in
+                 ws[row]):
             ws.row_dimensions[row].height = 25
         else:
             ws.row_dimensions[row].height = 20
@@ -230,6 +292,7 @@ def _add_outline_border(ws, start_row, end_row, start_col, end_col, border):
                 bottom=border.bottom if row == end_row else current_border.bottom
             )
             cell.border = new_border
+
 
 def extract_report_data_from_logs(log_text):
     lines = log_text.split('\n')
