@@ -9,6 +9,7 @@ from config import TIMEOUT
 
 logger = logging.getLogger(__name__)
 
+
 def extract_json_from_output(output):
     json_pattern = r'\{.*\}'
     matches = re.findall(json_pattern, output, re.DOTALL)
@@ -44,6 +45,7 @@ def extract_json_from_output(output):
 
     return None
 
+
 def run_recognition_on_image(image_path, task_id, program_script):
     try:
         logger.info(f"Запуск распознавания для: {os.path.basename(image_path)}")
@@ -73,6 +75,25 @@ def run_recognition_on_image(image_path, task_id, program_script):
             logger.error(f"Распознавание не удалось для {image_path}: {error_msg}")
             return create_error_result(error_msg)
 
+        # Добавляем расчет overall confidence если его нет в результате
+        if 'overall_confidence' not in recognition_result:
+            serial_conf = recognition_result.get('serial_number_confidence', 0.0)
+            digit_confs = recognition_result.get('recognition_confidences',
+                                                 [])  # Исправлено: recognition_confidences вместо recognition_confidence
+
+            def calculate_overall(serial_conf, digit_confs):
+                """Calculate overall confidence"""
+                if not digit_confs:
+                    return round(serial_conf, 4)
+
+                product = 1.0
+                for conf in digit_confs:
+                    product *= conf
+
+                return round(serial_conf * product, 4)
+
+            recognition_result['overall_confidence'] = calculate_overall(serial_conf, digit_confs)
+
         logger.info(f"Успешно обработано: {os.path.basename(image_path)}")
         return recognition_result
 
@@ -82,6 +103,7 @@ def run_recognition_on_image(image_path, task_id, program_script):
     except Exception as e:
         logger.error(f"Неожиданная ошибка при обработке {image_path}: {str(e)}")
         return create_error_result(str(e))
+
 
 def create_error_result(error_message):
     return {

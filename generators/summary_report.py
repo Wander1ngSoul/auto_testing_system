@@ -117,7 +117,8 @@ def create_summary_sheet(wb, report_data):
             ("🎯 Успешность обработки", f"{report_data['success_rate']:.2f}%"),
             ("⏱️ Общее время", f"{report_data['total_time_seconds']:.2f} сек"),
             ("⚡ Среднее время", f"{report_data['average_time_per_image']:.2f} сек/изобр"),
-            ("🚀 Скорость", f"{report_data['images_per_minute']:.2f} изобр/мин")
+            ("🚀 Скорость", f"{report_data['images_per_minute']:.2f} изобр/мин"),
+            ("🎯 Overall Confidence", f"{report_data['accuracy']['overall_confidence']['accuracy']:.1f}%")
         ]
 
         current_row = _create_info_block(ws, current_row, "📈 СТАТИСТИКА ОБРАБОТКИ",

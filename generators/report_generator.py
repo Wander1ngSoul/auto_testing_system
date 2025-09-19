@@ -46,6 +46,15 @@ def apply_excel_styles(wb, excel_file_path):
     ws = wb['Image Data']
     add_version_info_to_excel(wb, excel_file_path)
 
+    headers = [cell.value for cell in ws[4]]
+    if 'Overl Confidence' not in headers:
+        try:
+            confidences_idx = headers.index('Recognition Confidence') + 1
+            ws.insert_cols(confidences_idx + 1)
+            ws.insert_cols(row=4, column=confidences_idx + 1, value='Overall Confidence')
+        except:
+            ws.cell(row=4, column=ws.max_column + 1, value='Overall Confidence')
+
     data_start_row = 4
 
     reference_columns = []

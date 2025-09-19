@@ -34,15 +34,10 @@ def main():
 
     start_time = time.time()
 
-    success, processed_count, errors_count = process_images_folder(
+    success, processed_count, errors_count, skipped_count = process_images_folder(
         FOLDER_TEST, EXCEL_DATA, PROGRAM_SCRIPT, max_workers=max_workers
     )
-
-
-
     total_time = time.time() - start_time
-    image_files = get_image_files(FOLDER_TEST)
-    skipped_count = len(image_files) - processed_count - errors_count
 
     report = generate_summary_report(processed_count, errors_count, skipped_count, total_time, EXCEL_DATA)
 

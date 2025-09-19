@@ -59,21 +59,45 @@ def normalize_text(text):
 def calculate_accuracy_stats(df):
     total_tests = len(df)
 
-    indications_correct = df['Indications Match'].sum()
-    series_correct = df['Series Match'].sum()
-    model_correct = df['Model Match'].sum()
-    rate_correct = df['Rate Match'].sum()
-    overall_correct = df['Overall Match'].sum()
+    indications_correct = int(df['Indications Match'].sum())
+    series_correct = int(df['Series Match'].sum())
+    model_correct = int(df['Model Match'].sum())
+    rate_correct = int(df['Rate Match'].sum())
+    overall_correct = int(df['Overall Match'].sum())
+
+    if 'Overall Confidence Match' in df.columns:
+        overall_conf_correct = int(df['Overall Confidence Match'].sum())
+    else:
+        overall_conf_correct = 0
+
 
     def calculate_percentage(correct, total):
-        return (correct / total) * 100 if total > 0 else 0
+        return float((correct / total) * 100 if total > 0 else 0)
 
     return {
-        'total_tests': total_tests,
-        'indications': {'correct': indications_correct,
-                        'accuracy': calculate_percentage(indications_correct, total_tests)},
-        'series': {'correct': series_correct, 'accuracy': calculate_percentage(series_correct, total_tests)},
-        'model': {'correct': model_correct, 'accuracy': calculate_percentage(model_correct, total_tests)},
-        'rate': {'correct': rate_correct, 'accuracy': calculate_percentage(rate_correct, total_tests)},
-        'overall': {'correct': overall_correct, 'accuracy': calculate_percentage(overall_correct, total_tests)}
+        'total_tests': int(total_tests),
+        'indications': {
+            'correct': indications_correct,
+            'accuracy': calculate_percentage(indications_correct, total_tests)
+        },
+        'series': {
+            'correct': series_correct,
+            'accuracy': calculate_percentage(series_correct, total_tests)
+        },
+        'model': {
+            'correct': model_correct,
+            'accuracy': calculate_percentage(model_correct, total_tests)
+        },
+        'rate': {
+            'correct': rate_correct,
+            'accuracy': calculate_percentage(rate_correct, total_tests)
+        },
+        'overall': {
+            'correct': overall_correct,
+            'accuracy': calculate_percentage(overall_correct, total_tests)
+        },
+        'overall_confidence': {
+            'correct': overall_conf_correct,
+            'accuracy': calculate_percentage(overall_conf_correct, total_tests)
+        }
     }
