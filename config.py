@@ -6,7 +6,6 @@ import subprocess
 import os
 import logging
 
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -15,6 +14,11 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
+# ОТЛАДОЧНАЯ ИНФОРМАЦИЯ ДО ПРЕОБРАЗОВАНИЯ
+logger.info("🔧 ЗАГРУЖЕННЫЕ ПЕРЕМЕННЫЕ ИЗ .env:")
+logger.info(f"   MAX_WORKERS (raw): '{os.getenv('MAX_WORKERS')}'")
+logger.info(f"   PROCESSING_MODE: '{os.getenv('PROCESSING_MODE')}'")
+logger.info(f"   SELECTED_SERVER: '{os.getenv('SELECTED_SERVER')}'")
 
 MAIN_REPO_PATH = os.getenv('MAIN_REPO_PATH', '/app')
 FOLDER_TEST = os.getenv('FOLDER_TEST', '/app/testing_sets/test_1')
@@ -38,11 +42,24 @@ SERVERS = {
 }
 
 PROCESSING_MODE = os.getenv('PROCESSING_MODE', 'sequential')
-MAX_WORKERS = int(os.getenv('MAX_WORKERS', 1))
+
+# ИСПРАВЛЕННОЕ ПРЕОБРАЗОВАНИЕ MAX_WORKERS
+max_workers_str = os.getenv('MAX_WORKERS', '1')
+try:
+    MAX_WORKERS = int(max_workers_str)
+    logger.info(f"✅ MAX_WORKERS преобразован в int: {MAX_WORKERS}")
+except (ValueError, TypeError) as e:
+    logger.error(f"❌ Ошибка преобразования MAX_WORKERS '{max_workers_str}': {e}")
+    MAX_WORKERS = 1
+
+# ОТЛАДОЧНАЯ ИНФОРМАЦИЯ ПОСЛЕ ПРЕОБРАЗОВАНИЯ
+logger.info("🔧 ФИНАЛЬНЫЕ ЗНАЧЕНИЯ КОНФИГУРАЦИИ:")
+logger.info(f"   MAX_WORKERS: {MAX_WORKERS} (тип: {type(MAX_WORKERS)})")
+logger.info(f"   PROCESSING_MODE: '{PROCESSING_MODE}'")
+logger.info(f"   SELECTED_SERVER: '{SELECTED_SERVER}'")
 
 def get_git_version():
     try:
-        # Для Docker используем простой подход
         result = subprocess.run(
             ['git', 'describe', '--tags', '--abbrev=0'],
             capture_output=True,
@@ -66,7 +83,6 @@ def get_git_version():
         logger.warning(f"Не удалось получить версию из git: {e}")
         return "unknown"
 
-
 def rename_file_with_version_and_time(original_path):
     if not os.path.exists(original_path):
         logger.warning(f"Файл для переименования не существует: {original_path}")
@@ -89,7 +105,6 @@ def rename_file_with_version_and_time(original_path):
     except Exception as e:
         logger.error(f"Ошибка переименования файла {original_path}: {e}")
         return original_path
-
 
 APP_VERSION = get_git_version()
 
@@ -123,7 +138,6 @@ logger.info(f"🔐 TOKEN: {AUTHORIZED_TOKEN[:8]}...")
 logger.info(f"🏷️  VERSION: {APP_VERSION}")
 logger.info("=" * 60)
 
-
 def check_required_files():
     errors = []
 
@@ -147,7 +161,6 @@ def check_required_files():
 
     logger.info("✅ Все необходимые файлы найдены")
     return True
-
 
 if __name__ != "__main__":
     check_required_files()

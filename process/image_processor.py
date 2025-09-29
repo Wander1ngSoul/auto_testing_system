@@ -1,14 +1,120 @@
 import pandas as pd
 import time
-import logging
-import os
-
+import concurrent.futures
+from threading import Lock
 from config import *
 from recognition_runner import run_recognition_on_image
 from accuracy_calculator import compare_numeric_values, compare_text_values
 from utils.file_utils import load_excel_data, get_image_files, save_excel_progress
 
 logger = logging.getLogger(__name__)
+
+
+class ParallelImageProcessor:
+    def __init__(self, max_workers=4):
+        self.max_workers = max_workers
+        self.processed_count = 0
+        self.errors_count = 0
+        self.skipped_count = 0
+        self.df_lock = Lock()
+        self.counter_lock = Lock()
+
+    def process_single_image_wrapper(self, args):
+        image_file, image_path, df, filename_to_index, excel_file, program_script = args
+        temp_processor = SequentialImageProcessor()
+        success = temp_processor.process_single_image(
+            image_file, image_path, df, filename_to_index,
+            lambda current_df: save_excel_progress(current_df, excel_file),
+            program_script
+        )
+
+        with self.counter_lock:
+            if success:
+                self.processed_count += 1
+            else:
+                self.errors_count += 1
+
+        return success
+
+    def process_images_folder_parallel(self, images_folder, excel_file, program_script):
+        self.processed_count = self.errors_count = self.skipped_count = 0
+        start_time = time.time()
+
+        try:
+            df = load_excel_data(excel_file)
+            if df is None:
+                logger.error("Не удалось загрузить данные из Excel файла")
+                return False, 0, 0, 0
+
+            image_files = get_image_files(images_folder)
+            if not image_files:
+                logger.error("В указанной папке нет изображений")
+                return False, 0, 0, 0
+
+            filename_to_index = self.create_filename_mapping(df)
+
+            logger.info(f"🚀 Запускаем ПАРАЛЛЕЛЬНУЮ обработку с {self.max_workers} workers")
+            logger.info(f"📊 Всего изображений для обработки: {len(image_files)}")
+
+            tasks = []
+            for image_file in image_files:
+                image_path = os.path.join(images_folder, image_file)
+
+                if not os.path.exists(image_path):
+                    logger.warning(f"Файл {image_path} не существует, пропускаем")
+                    self.skipped_count += 1
+                    continue
+
+                if image_file not in filename_to_index:
+                    logger.warning(f"Файл {image_file} не найден в Excel, пропускаем")
+                    self.skipped_count += 1
+                    continue
+
+                tasks.append((image_file, image_path, df, filename_to_index, excel_file, program_script))
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = []
+
+                for task_args in tasks:
+                    future = executor.submit(self.process_single_image_wrapper, task_args)
+                    futures.append(future)
+
+                completed = 0
+                total = len(futures)
+
+                for future in concurrent.futures.as_completed(futures):
+                    completed += 1
+                    if completed % 5 == 0 or completed == total:
+                        logger.info(f"📊 Прогресс: {completed}/{total} обработано")
+
+            success = save_excel_progress(df, excel_file)
+            total_time = time.time() - start_time
+
+            if success:
+                logger.info("=" * 50)
+                logger.info(f"✅ Параллельная обработка завершена!")
+                logger.info(f"✅ Успешно: {self.processed_count}")
+                logger.info(f"❌ Ошибок: {self.errors_count}")
+                logger.info(f"⏭️  Пропущено: {self.skipped_count}")
+                logger.info(f"⏱️  Общее время: {total_time:.2f} секунд")
+                logger.info(f"📈 Скорость: {self.processed_count / max(total_time / 60, 0.01):.2f} изображений/мин")
+                logger.info("=" * 50)
+            else:
+                logger.error("❌ Ошибка при сохранении результатов в Excel")
+
+            return success, self.processed_count, self.errors_count, self.skipped_count
+
+        except Exception as e:
+            logger.error(f"💥 Критическая ошибка при параллельной обработке: {str(e)}")
+            return False, self.processed_count, self.errors_count, self.skipped_count
+
+    def create_filename_mapping(self, df):
+        filename_to_index = {}
+        for idx, row in df.iterrows():
+            filename = str(row.get('Filename', '')).strip()
+            if filename:
+                filename_to_index[filename] = idx
+        return filename_to_index
 
 
 class SequentialImageProcessor:
@@ -224,14 +330,45 @@ class SequentialImageProcessor:
             return False, self.processed_count, self.errors_count, self.skipped_count
 
 
-def process_images_folder(images_folder, excel_file, program_script, max_workers=1):
+def process_images_folder(images_folder, excel_file, program_script, max_workers=None):
+    # ОТЛАДКА ДО ВСЕГО
+    logger.info(f"🔍 DEBUG IMAGE_PROCESSOR START:")
+    logger.info(f"   MAX_WORKERS from config: {MAX_WORKERS}")
+    logger.info(f"   max_workers parameter: {max_workers}")
+    logger.info(f"   SELECTED_SERVER: {SELECTED_SERVER}")
+    logger.info(f"   PROCESSING_MODE: {PROCESSING_MODE}")
 
-    if SELECTED_SERVER != 'default':
-        logger.info("🌐 Режим сервера - используем последовательную обработку")
-        processor = SequentialImageProcessor()
-        return processor.process_images_folder_sequential(images_folder, excel_file, program_script)
+    if max_workers is None:
+        max_workers = MAX_WORKERS
+        logger.info(f"🔍 Используем MAX_WORKERS из config: {max_workers}")
     else:
-        logger.info("💻 Локальный режим - используем последовательную обработку")
+        logger.info(f"🔍 Используем переданный max_workers: {max_workers}")
+
+    # ОТЛАДОЧНАЯ ИНФОРМАЦИЯ - добавьте эту строку
+    logger.info(
+        f"🔧 Параметры обработки: MAX_WORKERS={max_workers}, SELECTED_SERVER='{SELECTED_SERVER}', PROCESSING_MODE='{PROCESSING_MODE}'")
+
+    # Условие для параллельной обработки
+    use_parallel = (max_workers > 1 and SELECTED_SERVER in ['server1', 'server2'])
+
+    logger.info(
+        f"🔍 Условие параллельной обработки: max_workers > 1 = {max_workers > 1}, SERVER in ['server1','server2'] = {SELECTED_SERVER in ['server1', 'server2']}")
+    logger.info(f"🔍 use_parallel = {use_parallel}")
+
+    if use_parallel:
+        logger.info(f"🚀 Запускаем ПАРАЛЛЕЛЬНУЮ обработку с {max_workers} workers")
+        processor = ParallelImageProcessor(max_workers=max_workers)
+        return processor.process_images_folder_parallel(images_folder, excel_file, program_script)
+    else:
+        reason = "неизвестная причина"
+        if max_workers <= 1:
+            reason = f"MAX_WORKERS={max_workers} (требуется > 1)"
+        elif SELECTED_SERVER not in ['server1', 'server2']:
+            reason = f"SELECTED_SERVER={SELECTED_SERVER} (только server1/server2)"
+        else:
+            reason = "другая причина"
+
+        logger.info(f"💻 Используем последовательную обработку: {reason}")
         processor = SequentialImageProcessor()
         return processor.process_images_folder_sequential(images_folder, excel_file, program_script)
 
