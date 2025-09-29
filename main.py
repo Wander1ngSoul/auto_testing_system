@@ -1,4 +1,3 @@
-import os.path
 import sys
 import time
 import logging
@@ -17,26 +16,37 @@ logger = logging.getLogger(__name__)
 
 def main():
     logger.info("=" * 60)
-    logger.info("ЗАПУСК АВТОМАТИЗИРОВАННОГО ТЕСТИРОВАНИЯ СИСТЕМЫ РАСПОЗНАВАНИЯ")
+    logger.info("🚀 АВТОМАТИЗИРОВАННОЕ ТЕСТИРОВАНИЕ СИСТЕМЫ РАСПОЗНАВАНИЯ")
     logger.info("=" * 60)
 
+    if SELECTED_SERVER == 'default':
+        logger.info("⚙️  РЕЖИМ: Локальный (default)")
+        processing_mode = "последовательная обработка"
+    else:
+        server_url = SERVERS.get(SELECTED_SERVER)
+        logger.info(f"🌐 РЕЖИМ: Серверный - {SELECTED_SERVER}")
+        logger.info(f"🔗 URL: {server_url}")
+        logger.info(f"🔑 Токен авторизации: {AUTHORIZED_TOKEN[:8]}...")
+        logger.info("📋 API: Многоэтапный (tasks → status → result)")
+        processing_mode = "последовательная обработка (серверная очередь)"
+
     if not validate_environment():
-        logger.error("Проверка окружения не пройдена. Завершение работы.")
+        logger.error("❌ Проверка окружения не пройдена. Завершение работы.")
         sys.exit(1)
 
-    logger.info(f"Папка с изображениями: {FOLDER_TEST}")
-    logger.info(f"Excel файл: {EXCEL_DATA}")
-    logger.info(f"Программа распознавания: {PROGRAM_SCRIPT}")
+    logger.info(f"📁 Папка с изображениями: {FOLDER_TEST}")
+    logger.info(f"📊 Excel файл: {EXCEL_DATA}")
+    logger.info(f"🔄 Режим обработки: {processing_mode}")
 
-    cpu_count = os.cpu_count() or 4
-    max_workers = min(cpu_count * 2, 8)
-    logger.info(f"Используем {max_workers} потоков для обработки")
+    if SELECTED_SERVER == 'default':
+        logger.info(f"🐍 Программа распознавания: {PROGRAM_SCRIPT}")
 
     start_time = time.time()
 
     success, processed_count, errors_count, skipped_count = process_images_folder(
-        FOLDER_TEST, EXCEL_DATA, PROGRAM_SCRIPT, max_workers=max_workers
+        FOLDER_TEST, EXCEL_DATA, PROGRAM_SCRIPT, max_workers=1
     )
+
     total_time = time.time() - start_time
 
     report = generate_summary_report(processed_count, errors_count, skipped_count, total_time, EXCEL_DATA)
@@ -44,11 +54,20 @@ def main():
     if success:
         try:
             new_excel_path = rename_file_with_version_and_time(EXCEL_DATA)
-            logger.info(f"Файл результатов переименован: {new_excel_path}")
+            logger.info(f"💾 Файл результатов переименован: {new_excel_path}")
+
+            if SELECTED_SERVER != 'default':
+                logger.info(f"🏁 Тестирование на сервере {SELECTED_SERVER} завершено!")
+            else:
+                logger.info(f"🏁 Локальное тестирование завершено!")
+
+            logger.info(f"⏱️  Общее время: {total_time:.2f} секунд")
+            logger.info(f"📈 Скорость: {report['images_per_minute']:.2f} изображений/мин")
+
         except Exception as e:
-            logger.error(f"Ошибка переименования файла: {e}")
+            logger.error(f"❌ Ошибка переименования файла: {e}")
     else:
-        logger.error("Тестирование завершено с ошибками!")
+        logger.error("❌ Тестирование завершено с ошибками!")
         sys.exit(1)
 
 

@@ -7,20 +7,16 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 
 
 def process_images_to_excel(folder_path, output_file='Тестирование.xlsx'):
-    # Создаем списки для данных
     filenames = []
     widths = []
     heights = []
     total_pixels = []
 
-    # Проходим по всем файлам в папке
     for filename in os.listdir(folder_path):
         file_path = os.path.join(folder_path, filename)
 
-        # Проверяем, что это файл изображения
         if os.path.isfile(file_path) and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff')):
             try:
-                # Открываем изображение и получаем размеры
                 with Image.open(file_path) as img:
                     width, height = img.size
                     total = width * height
@@ -34,7 +30,6 @@ def process_images_to_excel(folder_path, output_file='Тестирование.x
             except Exception as e:
                 print(f"Ошибка при обработке файла {filename}: {e}")
 
-    # Создаем DataFrame
     df = pd.DataFrame({
         'Filename': filenames,
         'Width (px)': widths,
@@ -42,7 +37,6 @@ def process_images_to_excel(folder_path, output_file='Тестирование.x
         'Total Pixels': total_pixels
     })
 
-    # Добавляем остальные колонки с пустыми значениями
     additional_columns = [
         'Inidications (reference)', 'Series number (reference)', 'Model (reference)', 'Rate (reference)',
         'Indications', 'Series number', 'Model', 'Rate',
@@ -52,25 +46,19 @@ def process_images_to_excel(folder_path, output_file='Тестирование.x
     for col in additional_columns:
         df[col] = ''
 
-    # Создаем Excel файл с помощью openpyxl для настройки цветов
     wb = Workbook()
     ws = wb.active
     ws.title = 'Image Data'
-
-    # Заполняем данные
     for r in dataframe_to_rows(df, index=False, header=True):
         ws.append(r)
 
-    # Цвета как в примере (голубые заголовки)
     header_fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
     header_font = Font(bold=True)
 
-    # Применяем цвета к заголовкам
     for cell in ws[1]:
         cell.fill = header_fill
         cell.font = header_font
 
-    # Настраиваем ширину колонок для лучшего отображения
     column_widths = {
         'A': 30,  # Filename
         'B': 12,  # Width (px)
@@ -93,7 +81,6 @@ def process_images_to_excel(folder_path, output_file='Тестирование.x
     for col, width in column_widths.items():
         ws.column_dimensions[col].width = width
 
-    # Сохраняем файл
     wb.save(output_file)
     print(f"Файл {output_file} успешно создан!")
     print(f"Обработано {len(filenames)} изображений")

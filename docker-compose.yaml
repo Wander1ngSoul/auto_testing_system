@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0.43
+    container_name: auto-tests-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: testing_system
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      timeout: 30s
+      retries: 10
+      start_period: 40s
+
+  auto-tests:
+    build: .
+    container_name: auto-tests-app
+    volumes:
+      - ./outputs:/app/outputs
+    environment:
+      - EXCEL_DATA=/app/demo/Тестирование_1.xlsx
+      - FOLDER_TEST=/app/testing_sets/test_1
+      - MAIN_REPO_PATH=/app
+      - SELECTED_SERVER=server2
+      - AUTHORIZED_TOKEN=8DWQLfproEJlyC8dJaLqRhBx1B2sJyZR4V
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=testing_system
+      - DB_USER=root
+      - DB_PASSWORD=root
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  mysql_data:

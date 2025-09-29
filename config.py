@@ -2,75 +2,100 @@ import threading
 from datetime import datetime
 from dotenv import load_dotenv
 from openpyxl.styles import PatternFill, Alignment, Font, Border, Side
+import subprocess
+import os
+import logging
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-import subprocess
-import os
 
-MAIN_REPO_PATH = os.getenv('MAIN_REPO_PATH')
+MAIN_REPO_PATH = os.getenv('MAIN_REPO_PATH', '/app')
+FOLDER_TEST = os.getenv('FOLDER_TEST', '/app/testing_sets/test_1')
+EXCEL_DATA = os.getenv('EXCEL_DATA', '/app/demo/Тестирование_1.xlsx')
 
-import threading
-from datetime import datetime
-from dotenv import load_dotenv
-from openpyxl.styles import PatternFill, Alignment, Font, Border, Side
-import subprocess
-import os
+PROGRAM_SCRIPT = os.getenv('PROGRAM_SCRIPT', '')
 
-load_dotenv()
+SELECTED_SERVER = os.getenv('SELECTED_SERVER', 'server2')
+AUTHORIZED_TOKEN = os.getenv('AUTHORIZED_TOKEN', '8DWQLfproEJlyC8dJaLqRhBx1B2sJyZR4V')
 
-MAIN_REPO_PATH = os.getenv('MAIN_REPO_PATH', 'D:/path/to/your/main/project')
+DB_HOST = os.getenv('DB_HOST', 'mysql')
+DB_PORT = int(os.getenv('DB_PORT', 3306))
+DB_NAME = os.getenv('DB_NAME', 'testing_system')
+DB_USER = os.getenv('DB_USER', 'root')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'root')
+
+SERVERS = {
+    'default': 'default',
+    'server1': 'http://80.93.179.130:9099',
+    'server2': 'http://ai-server1.ugrey.ru/'
+}
+
+PROCESSING_MODE = os.getenv('PROCESSING_MODE', 'sequential')
+MAX_WORKERS = int(os.getenv('MAX_WORKERS', 1))
 
 def get_git_version():
     try:
-        # Указываем путь к другому репозиторию через --git-dir и --work-tree
-        version = subprocess.check_output(
-            ['git', '--git-dir', os.path.join(MAIN_REPO_PATH, '.git'),
-             '--work-tree', MAIN_REPO_PATH, 'describe', '--tags', '--abbrev=0'],
-            stderr=subprocess.DEVNULL,
-            text=True
-        ).strip().replace('v', '')
-        return version
-    except:
-        try:
-            commit_hash = subprocess.check_output(
-                ['git', '--git-dir', os.path.join(MAIN_REPO_PATH, '.git'),
-                 '--work-tree', MAIN_REPO_PATH, 'rev-parse', '--short', 'HEAD'],
-                stderr=subprocess.DEVNULL,
-                text=True
-            ).strip()
-            return f"dev-{commit_hash}"
-        except:
-            return "unknown"
+        # Для Docker используем простой подход
+        result = subprocess.run(
+            ['git', 'describe', '--tags', '--abbrev=0'],
+            capture_output=True,
+            text=True,
+            cwd=MAIN_REPO_PATH
+        )
+        if result.returncode == 0:
+            return result.stdout.strip().replace('v', '')
+
+        result = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            capture_output=True,
+            text=True,
+            cwd=MAIN_REPO_PATH
+        )
+        if result.returncode == 0:
+            return f"dev-{result.stdout.strip()}"
+
+        return "unknown"
+    except Exception as e:
+        logger.warning(f"Не удалось получить версию из git: {e}")
+        return "unknown"
 
 
 def rename_file_with_version_and_time(original_path):
     if not os.path.exists(original_path):
+        logger.warning(f"Файл для переименования не существует: {original_path}")
         return original_path
 
-    directory = os.path.dirname(original_path)
-    filename = os.path.basename(original_path)
-    name, ext = os.path.splitext(filename)
+    try:
+        directory = os.path.dirname(original_path)
+        filename = os.path.basename(original_path)
+        name, ext = os.path.splitext(filename)
 
-    version = get_git_version()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        version = get_git_version()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    new_filename = f"{name}_v{version}_{timestamp}{ext}"
-    new_path = os.path.join(directory, new_filename)
+        new_filename = f"{name}_v{version}_{timestamp}{ext}"
+        new_path = os.path.join(directory, new_filename)
 
-    os.rename(original_path, new_path)
-    return new_path
+        os.rename(original_path, new_path)
+        logger.info(f"Файл переименован: {new_path}")
+        return new_path
+    except Exception as e:
+        logger.error(f"Ошибка переименования файла {original_path}: {e}")
+        return original_path
 
 
 APP_VERSION = get_git_version()
-FOLDER_TEST = os.getenv('FOLDER_TEST')
-EXCEL_DATA = os.getenv('EXCEL_DATA')
-PROGRAM_SCRIPT = os.getenv('PROGRAM_SCRIPT')
 
 processed_count = 0
 errors_count = 0
 skipped_count = 0
-
 df_lock = threading.Lock()
 
 GREEN_FILL = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
@@ -85,3 +110,44 @@ HEADER_FILL = BLUE_FILL
 
 TIMEOUT = 120
 SUPPORTED_IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif')
+
+logger.info("=" * 60)
+logger.info("⚙️  КОНФИГУРАЦИЯ АВТОТЕСТОВ")
+logger.info("=" * 60)
+logger.info(f"📁 MAIN_REPO_PATH: {MAIN_REPO_PATH}")
+logger.info(f"📊 EXCEL_DATA: {EXCEL_DATA}")
+logger.info(f"🖼️  FOLDER_TEST: {FOLDER_TEST}")
+logger.info(f"🌐 SELECTED_SERVER: {SELECTED_SERVER}")
+logger.info(f"🗄️  MySQL: {DB_HOST}:{DB_PORT}/{DB_NAME}")
+logger.info(f"🔐 TOKEN: {AUTHORIZED_TOKEN[:8]}...")
+logger.info(f"🏷️  VERSION: {APP_VERSION}")
+logger.info("=" * 60)
+
+
+def check_required_files():
+    errors = []
+
+    if not os.path.exists(EXCEL_DATA):
+        errors.append(f"Excel файл не найден: {EXCEL_DATA}")
+
+    if not os.path.exists(FOLDER_TEST):
+        errors.append(f"Папка с изображениями не найдена: {FOLDER_TEST}")
+    else:
+        image_files = [f for f in os.listdir(FOLDER_TEST)
+                       if f.lower().endswith(SUPPORTED_IMAGE_EXTENSIONS)]
+        if not image_files:
+            errors.append(f"В папке {FOLDER_TEST} нет поддерживаемых изображений")
+        else:
+            logger.info(f"📸 Найдено изображений: {len(image_files)}")
+
+    if errors:
+        for error in errors:
+            logger.error(f"❌ {error}")
+        return False
+
+    logger.info("✅ Все необходимые файлы найдены")
+    return True
+
+
+if __name__ != "__main__":
+    check_required_files()

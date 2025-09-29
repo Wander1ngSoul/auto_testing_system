@@ -46,10 +46,8 @@ def create_summary_sheet(wb, report_data):
             bottom=Side(style='thick', color=COLORS['primary'])
         )
 
-        # Заполняем данные отчета
         current_row = 1
 
-        # Заголовок
         ws.merge_cells(f'A{current_row}:F{current_row}')
         title_cell = ws[f'A{current_row}']
         title_cell.value = "🎯 ИТОГОВЫЙ ОТЧЕТ ТЕСТИРОВАНИЯ"
@@ -59,11 +57,9 @@ def create_summary_sheet(wb, report_data):
         title_cell.border = thick_border
         current_row += 1
 
-        # Пустая строка
         ws.row_dimensions[current_row].height = 5
         current_row += 1
 
-        # Блок общей информации
         info_data = [
             ("Всего тестов", report_data['accuracy']['total_tests'])
         ]

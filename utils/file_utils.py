@@ -1,6 +1,7 @@
 import pandas as pd
 import logging
 from openpyxl import load_workbook
+import os
 
 from config import *
 from generators.report_generator import apply_excel_styles
@@ -9,13 +10,20 @@ logger = logging.getLogger(__name__)
 
 
 def validate_environment():
-
     errors = []
+
     required_paths = {
         'FOLDER_TEST': FOLDER_TEST,
         'EXCEL_DATA': EXCEL_DATA,
-        'PROGRAM_SCRIPT': PROGRAM_SCRIPT
     }
+
+    if SELECTED_SERVER == 'default':
+        if not PROGRAM_SCRIPT:
+            errors.append("Переменная окружения PROGRAM_SCRIPT не определена")
+        elif not os.path.exists(PROGRAM_SCRIPT):
+            errors.append(f"Путь не существует: PROGRAM_SCRIPT = {PROGRAM_SCRIPT}")
+        else:
+            required_paths['PROGRAM_SCRIPT'] = PROGRAM_SCRIPT
 
     for name, path in required_paths.items():
         if not path:
@@ -36,7 +44,6 @@ def validate_environment():
 
 def load_excel_data(excel_file):
     try:
-
         dtype_spec = {
             'Series number (reference)': 'string',
             'Model (reference)': 'string',
@@ -82,14 +89,14 @@ def fix_column_data_types(df):
         if col in df.columns:
             try:
                 if dtype == 'string':
-                    df[col] = df[col].astype(str).apply(lambda x: x if pd.isna(x) else str(x).strip() if x != 'nan' else '')
+                    df[col] = df[col].astype(str).apply(
+                        lambda x: x if pd.isna(x) else str(x).strip() if x != 'nan' else '')
                 if dtype == 'int64':
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype('int64') if x != 'nan' else 0
                 else:
                     df[col] = df[col].astype(dtype)
             except Exception as e:
                 logger.warning(f"Ошибка преобразования колонки {col} в {dtype}: {e}")
-
                 continue
 
     return df
@@ -118,6 +125,7 @@ def save_excel_progress(df, excel_file, report_data=None):
     except Exception as e:
         logger.error(f"Ошибка сохранения Excel файла: {str(e)}")
         return False
+
 
 def get_image_files(images_folder):
     return [f for f in os.listdir(images_folder)
