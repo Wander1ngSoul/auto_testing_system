@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# ОТЛАДОЧНАЯ ИНФОРМАЦИЯ ДО ПРЕОБРАЗОВАНИЯ
 logger.info("🔧 ЗАГРУЖЕННЫЕ ПЕРЕМЕННЫЕ ИЗ .env:")
 logger.info(f"   MAX_WORKERS (raw): '{os.getenv('MAX_WORKERS')}'")
 logger.info(f"   PROCESSING_MODE: '{os.getenv('PROCESSING_MODE')}'")
@@ -29,11 +28,9 @@ PROGRAM_SCRIPT = os.getenv('PROGRAM_SCRIPT', '')
 SELECTED_SERVER = os.getenv('SELECTED_SERVER', 'server2')
 AUTHORIZED_TOKEN = os.getenv('AUTHORIZED_TOKEN', '8DWQLfproEJlyC8dJaLqRhBx1B2sJyZR4V')
 
-DB_HOST = os.getenv('DB_HOST', 'mysql')
-DB_PORT = int(os.getenv('DB_PORT', 3306))
-DB_NAME = os.getenv('DB_NAME', 'testing_system')
-DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'root')
+# SQLite Configuration
+DB_TYPE = os.getenv('DB_TYPE', 'sqlite')
+DB_PATH = os.getenv('DB_PATH', 'testing_system.db')
 
 SERVERS = {
     'default': 'default',
@@ -43,7 +40,6 @@ SERVERS = {
 
 PROCESSING_MODE = os.getenv('PROCESSING_MODE', 'sequential')
 
-# ИСПРАВЛЕННОЕ ПРЕОБРАЗОВАНИЕ MAX_WORKERS
 max_workers_str = os.getenv('MAX_WORKERS', '1')
 try:
     MAX_WORKERS = int(max_workers_str)
@@ -52,11 +48,12 @@ except (ValueError, TypeError) as e:
     logger.error(f"❌ Ошибка преобразования MAX_WORKERS '{max_workers_str}': {e}")
     MAX_WORKERS = 1
 
-# ОТЛАДОЧНАЯ ИНФОРМАЦИЯ ПОСЛЕ ПРЕОБРАЗОВАНИЯ
 logger.info("🔧 ФИНАЛЬНЫЕ ЗНАЧЕНИЯ КОНФИГУРАЦИИ:")
 logger.info(f"   MAX_WORKERS: {MAX_WORKERS} (тип: {type(MAX_WORKERS)})")
 logger.info(f"   PROCESSING_MODE: '{PROCESSING_MODE}'")
 logger.info(f"   SELECTED_SERVER: '{SELECTED_SERVER}'")
+logger.info(f"   DB_TYPE: '{DB_TYPE}'")
+logger.info(f"   DB_PATH: '{DB_PATH}'")
 
 def get_git_version():
     try:
@@ -133,7 +130,7 @@ logger.info(f"📁 MAIN_REPO_PATH: {MAIN_REPO_PATH}")
 logger.info(f"📊 EXCEL_DATA: {EXCEL_DATA}")
 logger.info(f"🖼️  FOLDER_TEST: {FOLDER_TEST}")
 logger.info(f"🌐 SELECTED_SERVER: {SELECTED_SERVER}")
-logger.info(f"🗄️  MySQL: {DB_HOST}:{DB_PORT}/{DB_NAME}")
+logger.info(f"🗄️  DATABASE: {DB_TYPE} -> {DB_PATH}")
 logger.info(f"🔐 TOKEN: {AUTHORIZED_TOKEN[:8]}...")
 logger.info(f"🏷️  VERSION: {APP_VERSION}")
 logger.info("=" * 60)

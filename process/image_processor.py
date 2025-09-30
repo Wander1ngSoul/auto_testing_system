@@ -344,12 +344,10 @@ def process_images_folder(images_folder, excel_file, program_script, max_workers
     else:
         logger.info(f"🔍 Используем переданный max_workers: {max_workers}")
 
-    # ОТЛАДОЧНАЯ ИНФОРМАЦИЯ - добавьте эту строку
     logger.info(
         f"🔧 Параметры обработки: MAX_WORKERS={max_workers}, SELECTED_SERVER='{SELECTED_SERVER}', PROCESSING_MODE='{PROCESSING_MODE}'")
 
-    # Условие для параллельной обработки
-    use_parallel = (max_workers > 1 and SELECTED_SERVER in ['server1', 'server2'])
+    use_parallel = (max_workers > 1 and SELECTED_SERVER in ['server1', 'server2', 'default'])
 
     logger.info(
         f"🔍 Условие параллельной обработки: max_workers > 1 = {max_workers > 1}, SERVER in ['server1','server2'] = {SELECTED_SERVER in ['server1', 'server2']}")
