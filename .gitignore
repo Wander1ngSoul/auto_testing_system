@@ -38,7 +38,7 @@ tmp/
 Thumbs.db
 desktop.ini
 
-demo/
+detail/
 testing_sets/
 *.xlsx
 *.xls

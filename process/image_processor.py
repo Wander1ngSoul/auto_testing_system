@@ -1,7 +1,9 @@
 import pandas as pd
 import time
-import concurrent.futures
-from threading import Lock
+import shutil
+import os
+from datetime import datetime
+import threading
 from config import *
 from recognition_runner import run_recognition_on_image
 from accuracy_calculator import compare_numeric_values, compare_text_values
@@ -10,119 +12,34 @@ from utils.file_utils import load_excel_data, get_image_files, save_excel_progre
 logger = logging.getLogger(__name__)
 
 
-class ParallelImageProcessor:
-    def __init__(self, max_workers=4):
-        self.max_workers = max_workers
-        self.processed_count = 0
-        self.errors_count = 0
-        self.skipped_count = 0
-        self.df_lock = Lock()
-        self.counter_lock = Lock()
-
-    def process_single_image_wrapper(self, args):
-        image_file, image_path, df, filename_to_index, excel_file, program_script = args
-        temp_processor = SequentialImageProcessor()
-        success = temp_processor.process_single_image(
-            image_file, image_path, df, filename_to_index,
-            lambda current_df: save_excel_progress(current_df, excel_file),
-            program_script
-        )
-
-        with self.counter_lock:
-            if success:
-                self.processed_count += 1
-            else:
-                self.errors_count += 1
-
-        return success
-
-    def process_images_folder_parallel(self, images_folder, excel_file, program_script):
-        self.processed_count = self.errors_count = self.skipped_count = 0
-        start_time = time.time()
-
-        try:
-            df = load_excel_data(excel_file)
-            if df is None:
-                logger.error("Не удалось загрузить данные из Excel файла")
-                return False, 0, 0, 0
-
-            image_files = get_image_files(images_folder)
-            if not image_files:
-                logger.error("В указанной папке нет изображений")
-                return False, 0, 0, 0
-
-            filename_to_index = self.create_filename_mapping(df)
-
-            logger.info(f"🚀 Запускаем ПАРАЛЛЕЛЬНУЮ обработку с {self.max_workers} workers")
-            logger.info(f"📊 Всего изображений для обработки: {len(image_files)}")
-
-            tasks = []
-            for image_file in image_files:
-                image_path = os.path.join(images_folder, image_file)
-
-                if not os.path.exists(image_path):
-                    logger.warning(f"Файл {image_path} не существует, пропускаем")
-                    self.skipped_count += 1
-                    continue
-
-                if image_file not in filename_to_index:
-                    logger.warning(f"Файл {image_file} не найден в Excel, пропускаем")
-                    self.skipped_count += 1
-                    continue
-
-                tasks.append((image_file, image_path, df, filename_to_index, excel_file, program_script))
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                futures = []
-
-                for task_args in tasks:
-                    future = executor.submit(self.process_single_image_wrapper, task_args)
-                    futures.append(future)
-
-                completed = 0
-                total = len(futures)
-
-                for future in concurrent.futures.as_completed(futures):
-                    completed += 1
-                    if completed % 5 == 0 or completed == total:
-                        logger.info(f"📊 Прогресс: {completed}/{total} обработано")
-
-            success = save_excel_progress(df, excel_file)
-            total_time = time.time() - start_time
-
-            if success:
-                logger.info("=" * 50)
-                logger.info(f"✅ Параллельная обработка завершена!")
-                logger.info(f"✅ Успешно: {self.processed_count}")
-                logger.info(f"❌ Ошибок: {self.errors_count}")
-                logger.info(f"⏭️  Пропущено: {self.skipped_count}")
-                logger.info(f"⏱️  Общее время: {total_time:.2f} секунд")
-                logger.info(f"📈 Скорость: {self.processed_count / max(total_time / 60, 0.01):.2f} изображений/мин")
-                logger.info("=" * 50)
-            else:
-                logger.error("❌ Ошибка при сохранении результатов в Excel")
-
-            return success, self.processed_count, self.errors_count, self.skipped_count
-
-        except Exception as e:
-            logger.error(f"💥 Критическая ошибка при параллельной обработке: {str(e)}")
-            return False, self.processed_count, self.errors_count, self.skipped_count
-
-    def create_filename_mapping(self, df):
-        filename_to_index = {}
-        for idx, row in df.iterrows():
-            filename = str(row.get('Filename', '')).strip()
-            if filename:
-                filename_to_index[filename] = idx
-        return filename_to_index
-
-
-class SequentialImageProcessor:
+class ImageProcessor:
     def __init__(self):
         self.processed_count = 0
         self.errors_count = 0
         self.skipped_count = 0
         self.df_lock = threading.Lock()
+
+    def create_excel_copy(self, original_excel):
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            target_dir = os.path.join(current_dir, '..', 'detail')
+            os.makedirs(target_dir, exist_ok=True)
+
+            original_name = os.path.basename(original_excel)
+            name_without_ext = os.path.splitext(original_name)[0]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            copy_excel_file = os.path.join(target_dir, f"{name_without_ext}_{timestamp}.xlsx")
+
+            shutil.copy2(original_excel, copy_excel_file)
+            logger.info(f"📋 Создана копия Excel:")
+            logger.info(f"   Исходный: {original_excel}")
+            logger.info(f"   Копия: {copy_excel_file}")
+
+            return copy_excel_file
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания копии Excel: {str(e)}")
+            return original_excel
 
     def is_already_processed(self, df, row_index):
         current_indications = str(df.at[row_index, 'Indications']) if pd.notna(df.at[row_index, 'Indications']) else ''
@@ -155,7 +72,6 @@ class SequentialImageProcessor:
         indications_match = compare_numeric_values(meter_reading, ref_indications)
         df.at[row_index, 'Indications Match'] = int(indications_match)
 
-
         series_match = compare_text_values(serial_number, ref_series)
         df.at[row_index, 'Series Match'] = int(series_match)
 
@@ -171,12 +87,16 @@ class SequentialImageProcessor:
         df.at[row_index, 'Overall Confidence Match'] = int(overall_confidence > 0)
 
     def process_single_image(self, image_file, image_path, df, filename_to_index, save_callback, program_script):
+        logger.info(f"🔍 ПОИСК ФАЙЛА {image_file} В МАППИНГЕ:")
+        logger.info(f"   Доступные файлы в маппинге: {list(filename_to_index.keys())[:5]}...")
+
         if image_file not in filename_to_index:
-            logger.warning(f"Файл {image_file} не найден в Excel, пропускаем")
+            logger.warning(f"❌ Файл {image_file} не найден в Excel, пропускаем")
             self.skipped_count += 1
             return False
 
         row_index = filename_to_index[image_file]
+        logger.info(f"✅ Найден файл {image_file} в строке {row_index}")
 
         with self.df_lock:
             df.at[row_index, 'Filename'] = image_file
@@ -194,6 +114,7 @@ class SequentialImageProcessor:
         return self.update_dataframe_with_result(result, df, row_index, image_file, save_callback)
 
     def update_dataframe_with_result(self, result, df, row_index, image_file, save_callback):
+        logger.info(f"📊 Начинаем запись в Excel для {image_file}")
 
         if result['status'] == 'completed':
             try:
@@ -205,7 +126,6 @@ class SequentialImageProcessor:
                 serial_confidence = result.get('serial_number_confidence', 0.0)
                 recognition_confidences = result.get('recognition_confidences', [])
                 overall_confidence = result.get('overall_confidence', 0.0)
-
                 timings = result.get('timings', {})
                 image_size = result.get('image_size', '')
                 create_date = result.get('create_date', '')
@@ -219,15 +139,30 @@ class SequentialImageProcessor:
                 ref_rate = str(df.at[row_index, 'Rate (reference)']) if pd.notna(
                     df.at[row_index, 'Rate (reference)']) else ''
 
+                logger.info(f"💾 ЗАПИСЫВАЕМ В EXCEL ДЛЯ {image_file}:")
+                logger.info(f"   📝 Indications: {meter_reading}")
+                logger.info(f"   📝 Series number: {serial_number}")
+                logger.info(f"   📝 Model: {model}")
+                logger.info(f"   📝 Rate: {rate}")
+                logger.info(f"   📝 Overall Confidence: {overall_confidence}")
+
                 with self.df_lock:
+                    df.at[row_index, 'Filename'] = image_file
                     df.at[row_index, 'Indications'] = str(meter_reading)
                     df.at[row_index, 'Series number'] = str(serial_number)
                     df.at[row_index, 'Model'] = str(model)
                     df.at[row_index, 'Rate'] = str(rate)
-
                     df.at[row_index, 'Serial Confidence'] = serial_confidence
-                    df.at[row_index, 'Recognition Confidence'] = str(recognition_confidences)
+
+                    if 'Recognition Confidence' in df.columns:
+                        df['Recognition Confidence'] = df['Recognition Confidence'].astype(object)
+                    else:
+                        df['Recognition Confidence'] = None
+                    df.at[row_index, 'Recognition Confidence'] = recognition_confidences
+
                     df.at[row_index, 'Overall Confidence'] = overall_confidence
+                    df.at[row_index, 'Image Size'] = image_size
+                    df.at[row_index, 'Create Date'] = create_date
 
                     for timing_key, timing_value in timings.items():
                         timing_col = f'Timing {timing_key.title()}'
@@ -241,11 +176,18 @@ class SequentialImageProcessor:
 
                     self.processed_count += 1
 
-                logger.info(f"✅ Успешно обработано: {image_file}")
+                logger.info(f"✅ Данные записаны в DataFrame для {image_file}")
+                logger.info(f"💾 Вызываем сохранение Excel для {image_file}")
+                save_success = save_callback(df)
+
+                if save_success:
+                    logger.info(f"✅ Excel файл успешно сохранен для {image_file}")
+                else:
+                    logger.error(f"❌ Ошибка сохранения Excel для {image_file}")
 
                 if self.processed_count % 5 == 0:
+                    logger.info(f"📦 Дополнительное сохранение после {self.processed_count} изображений")
                     save_callback(df)
-                    logger.info(f"💾 Прогресс сохранен после {self.processed_count} изображений")
 
                 return True
 
@@ -265,18 +207,27 @@ class SequentialImageProcessor:
 
     def create_filename_mapping(self, df):
         filename_to_index = {}
+        logger.info(f"🔍 СОЗДАЕМ МАППИНГ ФАЙЛОВ:")
+        logger.info(f"   Всего строк в DF: {len(df)}")
+
         for idx, row in df.iterrows():
             filename = str(row.get('Filename', '')).strip()
             if filename:
                 filename_to_index[filename] = idx
+                if len(filename_to_index) <= 5:
+                    logger.info(f"   📁 {filename} -> строка {idx}")
+
+        logger.info(f"   📊 Всего найдено соответствий: {len(filename_to_index)}")
         return filename_to_index
 
-    def process_images_folder_sequential(self, images_folder, excel_file, program_script):
+    def process_images_folder(self, images_folder, excel_file, program_script):
         self.processed_count = self.errors_count = self.skipped_count = 0
         start_time = time.time()
 
         try:
-            df = load_excel_data(excel_file)
+            copied_excel_file = self.create_excel_copy(excel_file)
+
+            df = load_excel_data(copied_excel_file)
             if df is None:
                 logger.error("Не удалось загрузить данные из Excel файла")
                 return False, 0, 0, 0
@@ -301,14 +252,14 @@ class SequentialImageProcessor:
 
                 success = self.process_single_image(
                     image_file, image_path, df, filename_to_index,
-                    lambda current_df: save_excel_progress(current_df, excel_file),
+                    lambda current_df: save_excel_progress(current_df, copied_excel_file),
                     program_script
                 )
 
                 if i % 10 == 0 or i == len(image_files):
                     logger.info(f"📊 Прогресс: {i}/{len(image_files)} обработано")
 
-            success = save_excel_progress(df, excel_file)
+            success = save_excel_progress(df, copied_excel_file)
             total_time = time.time() - start_time
 
             if success:
@@ -320,6 +271,20 @@ class SequentialImageProcessor:
                 logger.info(f"⏱️  Общее время: {total_time:.2f} секунд")
                 logger.info(f"📈 Скорость: {self.processed_count / max(total_time / 60, 0.01):.2f} изображений/мин")
                 logger.info("=" * 50)
+
+                logger.info(f"🎯 ПЕРЕДАЕМ ФАЙЛ В generate_summary_report:")
+                logger.info(f"   📁 copied_excel_file: {copied_excel_file}")
+                logger.info(f"   📁 excel_file (оригинал): {excel_file}")
+
+
+                from generators.report_generator import generate_summary_report
+                generate_summary_report(
+                    self.processed_count,
+                    self.errors_count,
+                    self.skipped_count,
+                    total_time,
+                    copied_excel_file
+                )
             else:
                 logger.error("❌ Ошибка при сохранении результатов в Excel")
 
@@ -331,48 +296,17 @@ class SequentialImageProcessor:
 
 
 def process_images_folder(images_folder, excel_file, program_script, max_workers=None):
-    # ОТЛАДКА ДО ВСЕГО
-    logger.info(f"🔍 DEBUG IMAGE_PROCESSOR START:")
-    logger.info(f"   MAX_WORKERS from config: {MAX_WORKERS}")
-    logger.info(f"   max_workers parameter: {max_workers}")
-    logger.info(f"   SELECTED_SERVER: {SELECTED_SERVER}")
-    logger.info(f"   PROCESSING_MODE: {PROCESSING_MODE}")
+    logger.info(f"🔍 Обработка изображений:")
+    logger.info(f"   Папка с изображениями: {images_folder}")
+    logger.info(f"   Excel файл: {excel_file}")
+    logger.info(f"   Сервер: {SELECTED_SERVER}")
 
-    if max_workers is None:
-        max_workers = MAX_WORKERS
-        logger.info(f"🔍 Используем MAX_WORKERS из config: {max_workers}")
-    else:
-        logger.info(f"🔍 Используем переданный max_workers: {max_workers}")
-
-    logger.info(
-        f"🔧 Параметры обработки: MAX_WORKERS={max_workers}, SELECTED_SERVER='{SELECTED_SERVER}', PROCESSING_MODE='{PROCESSING_MODE}'")
-
-    use_parallel = (max_workers > 1 and SELECTED_SERVER in ['server1', 'server2', 'default'])
-
-    logger.info(
-        f"🔍 Условие параллельной обработки: max_workers > 1 = {max_workers > 1}, SERVER in ['server1','server2'] = {SELECTED_SERVER in ['server1', 'server2']}")
-    logger.info(f"🔍 use_parallel = {use_parallel}")
-
-    if use_parallel:
-        logger.info(f"🚀 Запускаем ПАРАЛЛЕЛЬНУЮ обработку с {max_workers} workers")
-        processor = ParallelImageProcessor(max_workers=max_workers)
-        return processor.process_images_folder_parallel(images_folder, excel_file, program_script)
-    else:
-        reason = "неизвестная причина"
-        if max_workers <= 1:
-            reason = f"MAX_WORKERS={max_workers} (требуется > 1)"
-        elif SELECTED_SERVER not in ['server1', 'server2']:
-            reason = f"SELECTED_SERVER={SELECTED_SERVER} (только server1/server2)"
-        else:
-            reason = "другая причина"
-
-        logger.info(f"💻 Используем последовательную обработку: {reason}")
-        processor = SequentialImageProcessor()
-        return processor.process_images_folder_sequential(images_folder, excel_file, program_script)
+    processor = ImageProcessor()
+    return processor.process_images_folder(images_folder, excel_file, program_script)
 
 
 def get_processing_stats():
-    processor = SequentialImageProcessor()
+    processor = ImageProcessor()
     return {
         'processed': processor.processed_count,
         'errors': processor.errors_count,
@@ -381,5 +315,5 @@ def get_processing_stats():
 
 
 def reset_counters():
-    processor = SequentialImageProcessor()
+    processor = ImageProcessor()
     processor.processed_count = processor.errors_count = processor.skipped_count = 0

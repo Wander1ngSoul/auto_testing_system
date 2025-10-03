@@ -49,7 +49,8 @@ def extract_json_from_output(output):
 
 def run_recognition_on_image_server(image_path, task_id, server_url):
     try:
-        logger.info(f"📤 Отправка изображения на сервер: {os.path.basename(image_path)}")
+        image_name = os.path.basename(image_path)
+        logger.info(f"📤 Отправка изображения на сервер: {image_name}")
 
         headers = {
             'Authorization': f'Bearer {AUTHORIZED_TOKEN}',
@@ -69,6 +70,8 @@ def run_recognition_on_image_server(image_path, task_id, server_url):
                 timeout=TIMEOUT
             )
 
+        logger.info(f"📥 Ответ создания задачи - Статус: {response.status_code}")
+
         if response.status_code != 200:
             error_msg = f"Ошибка создания задачи: HTTP {response.status_code} - {response.text}"
             logger.error(error_msg)
@@ -82,78 +85,83 @@ def run_recognition_on_image_server(image_path, task_id, server_url):
                 logger.error(error_msg)
                 return create_error_result(error_msg)
 
-            logger.info(f"✅ Задача создана, ID: {task_uuid[:8]}...")
+            logger.info(f"✅ Задача создана, ID: {task_uuid}")
 
-            wait_time = task_data.get('estimated_wait_time', 20)
-            logger.info(f"⏳ Ожидаем {wait_time} секунд...")
-
-        except json.JSONDecodeError:
-            error_msg = "Неверный JSON ответ от сервера при создании задачи"
+        except json.JSONDecodeError as e:
+            error_msg = f"Неверный JSON ответ от сервера при создании задачи: {str(e)}"
             logger.error(error_msg)
             return create_error_result(error_msg)
 
-        time.sleep(wait_time)
-
+        # Опрашиваем каждые 5 секунд пока не получим completed
         result_url = f"{server_url}/result?uuid={task_uuid}"
-        logger.info(f"📥 Запрашиваем результат...")
+        max_attempts = 60  # максимум 5 минут ожидания
+        attempt = 0
 
-        result_response = requests.get(
-            result_url,
-            headers=headers,
-            timeout=TIMEOUT
-        )
+        while attempt < max_attempts:
+            attempt += 1
+            logger.info(f"🔄 Опрос результата {attempt}/{max_attempts}...")
 
-        if result_response.status_code != 200:
-            error_msg = f"Ошибка получения результата: HTTP {result_response.status_code}"
-            logger.error(error_msg)
+            result_response = requests.get(
+                result_url,
+                headers=headers,
+                timeout=TIMEOUT
+            )
 
-            if result_response.status_code == 404 or "not ready" in result_response.text.lower():
-                logger.info("🔄 Результат не готов, ждем еще 10 секунд...")
-                time.sleep(10)
+            logger.info(f"📥 Ответ результата - Статус: {result_response.status_code}")
 
-                result_response = requests.get(
-                    result_url,
-                    headers=headers,
-                    timeout=TIMEOUT
-                )
-
-                if result_response.status_code != 200:
-                    error_msg = f"Повторная ошибка получения результата: HTTP {result_response.status_code}"
-                    logger.error(error_msg)
-                    return create_error_result(error_msg)
-            else:
-                return create_error_result(error_msg)
-
-        try:
-            recognition_result = result_response.json()
-
-            if not isinstance(recognition_result, dict):
-                error_msg = "Некорректный формат результата"
+            if result_response.status_code != 200:
+                error_msg = f"Ошибка получения результата: HTTP {result_response.status_code}"
                 logger.error(error_msg)
                 return create_error_result(error_msg)
 
-            if 'overall_confidence' not in recognition_result:
-                serial_conf = recognition_result.get('serial_number_confidence', 0.0)
-                digit_confs = recognition_result.get('recognition_confidences', [])
+            try:
+                recognition_result = result_response.json()
+                current_status = recognition_result.get('status')
 
-                overall_conf = serial_conf
-                if digit_confs:
-                    product = 1.0
-                    for conf in digit_confs:
-                        product *= conf
-                    overall_conf = round(serial_conf * product, 4)
+                logger.info(f"📊 Текущий статус задачи: '{current_status}'")
 
-                recognition_result['overall_confidence'] = overall_conf
+                if current_status == 'completed':
+                    # ЛОГИРУЕМ ЧТО ПРИШЛО В ОТВЕТЕ
+                    logger.info("=" * 60)
+                    logger.info(f"📋 ПОЛНЫЙ ОТВЕТ ОТ СЕРВЕРА ДЛЯ {image_name}:")
 
-            recognition_result['status'] = 'completed'
+                    # Просто печатаем все поля что пришли
+                    fields_to_log = [
+                        ('status', '📊 Статус'),
+                        ('create_date', '📅 Create date'),
+                        ('image_size', '🖼️  Image size'),
+                        ('meter_reading', '🔢 Meter reading'),
+                        ('model', '📱 Model'),
+                        ('model_confidence', '✅ Model confidence'),
+                        ('rate', '⚡ Rate'),
+                        ('serial_number', '🏷️  Serial number'),
+                        ('serial_number_confidence', '✅ Serial confidence'),
+                        ('recognition_confidences', '🔢 Recognition confidences'),
+                        ('overall_confidence', '📈 Overall confidence'),
+                        ('timings', '⏱️  Timings')
+                    ]
 
-            logger.info(f"✅ Успешно обработано: {os.path.basename(image_path)}")
-            return recognition_result
+                    for field, description in fields_to_log:
+                        value = recognition_result.get(field)
+                        logger.info(f"   {description}: {value}")
 
-        except json.JSONDecodeError:
-            error_msg = "Неверный JSON в результате"
-            logger.error(error_msg)
-            return create_error_result(error_msg)
+                    logger.info("=" * 60)
+                    logger.info(f"✅ Задача завершена! Возвращаем результат для {image_name}")
+                    return recognition_result
+                else:
+                    logger.info(f"⏳ Статус '{current_status}' - ждем 5 секунд...")
+                    time.sleep(5)  # ждем 5 секунд перед следующим опросом
+
+            except json.JSONDecodeError as e:
+                error_msg = f"Неверный JSON в результате: {str(e)}"
+                logger.error(error_msg)
+                logger.error(f"📋 Сырой ответ: {result_response.text}")
+                return create_error_result(error_msg)
+
+        # Если вышли по максимальному количеству попыток
+        error_msg = f"Превышено время ожидания завершения задачи ({max_attempts * 5} секунд)"
+        logger.error(error_msg)
+        return create_error_result(error_msg)
 
     except requests.exceptions.Timeout:
         logger.error(f"⏰ Таймаут при обработке {os.path.basename(image_path)}")

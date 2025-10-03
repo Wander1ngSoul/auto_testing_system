@@ -21,14 +21,13 @@ logger.info(f"   SELECTED_SERVER: '{os.getenv('SELECTED_SERVER')}'")
 
 MAIN_REPO_PATH = os.getenv('MAIN_REPO_PATH', '/app')
 FOLDER_TEST = os.getenv('FOLDER_TEST', '/app/testing_sets/test_1')
-EXCEL_DATA = os.getenv('EXCEL_DATA', '/app/demo/Тестирование_1.xlsx')
+EXCEL_DATA = os.getenv('EXCEL_DATA', '/app/detail/Тестирование_1.xlsx')
 
 PROGRAM_SCRIPT = os.getenv('PROGRAM_SCRIPT', '')
 
-SELECTED_SERVER = os.getenv('SELECTED_SERVER', 'server2')
+SELECTED_SERVER = os.getenv('SELECTED_SERVER')
 AUTHORIZED_TOKEN = os.getenv('AUTHORIZED_TOKEN', '8DWQLfproEJlyC8dJaLqRhBx1B2sJyZR4V')
 
-# SQLite Configuration
 DB_TYPE = os.getenv('DB_TYPE', 'sqlite')
 DB_PATH = os.getenv('DB_PATH', 'testing_system.db')
 
@@ -40,16 +39,10 @@ SERVERS = {
 
 PROCESSING_MODE = os.getenv('PROCESSING_MODE', 'sequential')
 
-max_workers_str = os.getenv('MAX_WORKERS', '1')
-try:
-    MAX_WORKERS = int(max_workers_str)
-    logger.info(f"✅ MAX_WORKERS преобразован в int: {MAX_WORKERS}")
-except (ValueError, TypeError) as e:
-    logger.error(f"❌ Ошибка преобразования MAX_WORKERS '{max_workers_str}': {e}")
-    MAX_WORKERS = 1
+max_workers_str = 1
 
 logger.info("🔧 ФИНАЛЬНЫЕ ЗНАЧЕНИЯ КОНФИГУРАЦИИ:")
-logger.info(f"   MAX_WORKERS: {MAX_WORKERS} (тип: {type(MAX_WORKERS)})")
+logger.info(f"   MAX_WORKERS: 1")
 logger.info(f"   PROCESSING_MODE: '{PROCESSING_MODE}'")
 logger.info(f"   SELECTED_SERVER: '{SELECTED_SERVER}'")
 logger.info(f"   DB_TYPE: '{DB_TYPE}'")

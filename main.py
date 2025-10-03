@@ -44,7 +44,7 @@ def main():
     start_time = time.time()
 
     success, processed_count, errors_count, skipped_count = process_images_folder(
-        FOLDER_TEST, EXCEL_DATA, PROGRAM_SCRIPT
+        FOLDER_TEST, EXCEL_DATA, PROGRAM_SCRIPT, max_workers=1
     )
 
     total_time = time.time() - start_time

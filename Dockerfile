@@ -37,14 +37,11 @@ RUN pip install --no-cache-dir tensorflow==2.18.0
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# КОПИРУЕМ ИСХОДНЫЙ КОД
 COPY . .
 
-# КОПИРУЕМ ТЕСТОВЫЕ ДАННЫЕ ИЗ ПАПКИ ПРОЕКТА (относительные пути!)
 COPY ./demo/Тестирование_1.xlsx /app/demo/
 COPY ./testing_sets/test_1/ /app/testing_sets/test_1/
 
-# ПРОВЕРКА ЧТО ФАЙЛЫ СКОПИРОВАЛИСЬ
 RUN echo "=== Проверка файлов ===" && \
     echo "Excel файл:" && ls -la /app/demo/ && \
     echo "Изображения:" && find /app/testing_sets/test_1/ -type f | head -5 && \

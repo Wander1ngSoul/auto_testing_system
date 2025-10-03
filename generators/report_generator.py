@@ -47,7 +47,7 @@ def apply_excel_styles(wb, excel_file_path):
     add_version_info_to_excel(wb, excel_file_path)
 
     headers = [cell.value for cell in ws[4]]
-    if 'Overl Confidence' not in headers:
+    if 'Overall Confidence' not in headers:
         try:
             confidences_idx = headers.index('Recognition Confidence') + 1
             ws.insert_cols(confidences_idx + 1)
@@ -166,27 +166,65 @@ def auto_adjust_column_widths(ws, start_row=4):
 
 
 def generate_summary_report(processed_count, errors_count, skipped_count, total_time, excel_file):
+    logger.info(f"🎯 ПОЛУЧЕН ФАЙЛ В generate_summary_report: {excel_file}")
+    logger.info(f"📁 Абсолютный путь: {os.path.abspath(excel_file)}")
+
     total_attempted = processed_count + errors_count
 
     try:
-        df = pd.read_excel(excel_file, sheet_name='Image Data', skiprows=3)
-        accuracy_stats = calculate_accuracy_stats(df)
+        logger.info(f"📊 ЗАГРУЖАЕМ ДАННЫЕ ДЛЯ РАСЧЕТА ТОЧНОСТИ ИЗ: {excel_file}")
+
+        df_full = pd.read_excel(excel_file, sheet_name='Image Data', header=None)
+        logger.info(f"📋 ВСЕГО СТРОК В ФАЙЛЕ: {len(df_full)}")
+
+        header_row = None
+        for i in range(min(10, len(df_full))):
+            row_values = [str(x) for x in df_full.iloc[i].values if pd.notna(x)]
+            logger.info(f"   Строка {i}: {row_values}")
+            if 'Filename' in row_values:
+                header_row = i
+                logger.info(f"✅ НАЙДЕНЫ ЗАГОЛОВКИ В СТРОКЕ {i}")
+                break
+
+        if header_row is None:
+            logger.error("❌ НЕ НАЙДЕНА СТРОКА С ЗАГОЛОВКАМИ")
+            accuracy_stats = create_empty_accuracy_stats()
+        else:
+            df = pd.read_excel(excel_file, sheet_name='Image Data', header=header_row)
+            logger.info(f"📊 ЗАГРУЖЕНО ДАННЫХ: {len(df)} строк, {len(df.columns)} колонок")
+            logger.info(f"📋 КОЛОНКИ: {list(df.columns)}")
+
+            required_cols = ['Indications Match', 'Series Match', 'Model Match', 'Rate Match', 'Overall Match']
+            for col in required_cols:
+                if col in df.columns:
+                    non_zero = (df[col] == 1).sum()
+                    logger.info(f"   ✅ {col}: {non_zero} совпадений из {len(df)}")
+                else:
+                    logger.error(f"   ❌ {col}: ОТСУТСТВУЕТ")
+
+            accuracy_stats = calculate_accuracy_stats(df)
+
     except Exception as e:
-        logger.error(f"Ошибка загрузки данных для расчета точности: {str(e)}")
+        logger.error(f"❌ Ошибка загрузки данных для расчета точности: {str(e)}")
+        import traceback
+        logger.error(f"📋 Детали ошибки: {traceback.format_exc()}")
         accuracy_stats = create_empty_accuracy_stats()
 
     report = create_report_dict(processed_count, errors_count, skipped_count,
                                 total_attempted, total_time, accuracy_stats)
 
     print_report(report)
+
     try:
         wb = openpyxl.load_workbook(excel_file)
         from generators.summary_report import create_summary_sheet
         create_summary_sheet(wb, report)
         wb.save(excel_file)
-        logger.info("Итоговый отчет добавлен в Excel файл")
+        logger.info("✅ Итоговый отчет добавлен в Excel файл")
     except Exception as e:
-        logger.error(f"Ошибка сохранения отчета в Excel: {str(e)}")
+        logger.error(f"❌ Ошибка сохранения отчета в Excel: {str(e)}")
+        import traceback
+        logger.error(f"📋 Детали ошибки: {traceback.format_exc()}")
 
     return report
 

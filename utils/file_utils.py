@@ -91,8 +91,9 @@ def fix_column_data_types(df):
                 if dtype == 'string':
                     df[col] = df[col].astype(str).apply(
                         lambda x: x if pd.isna(x) else str(x).strip() if x != 'nan' else '')
+                # ПРАВИЛЬНО:
                 if dtype == 'int64':
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype('int64') if x != 'nan' else 0
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype('int64')
                 else:
                     df[col] = df[col].astype(dtype)
             except Exception as e:
@@ -104,26 +105,52 @@ def fix_column_data_types(df):
 
 def save_excel_progress(df, excel_file, report_data=None):
     try:
+        logger.info(f"💾 НАЧИНАЕМ СОХРАНЕНИЕ EXCEL: {excel_file}")
+        logger.info(f"📊 Размер DataFrame: {len(df)} строк, {len(df.columns)} колонок")
+
+
+        if df.empty:
+            logger.warning("⚠️ DataFrame пустой!")
+            return False
+        if len(df) > 0:
+            last_rows = df.tail(3)
+            logger.info(f"📋 Последние 3 строки в DataFrame:")
+            for idx, row in last_rows.iterrows():
+                logger.info(f"   Строка {idx}: Indications='{row.get('Indications', '')}', "
+                            f"Series='{row.get('Series number', '')}', "
+                            f"Model='{row.get('Model', '')}'")
+
         temp_file = excel_file.replace('.xlsx', '_temp.xlsx')
+        logger.info(f"🔄 Создаем временный файл: {temp_file}")
 
         with pd.ExcelWriter(temp_file, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='Image Data', index=False)
 
+        logger.info(f"✅ Данные записаны во временный файл")
+
         wb = load_workbook(temp_file)
+        logger.info(f"🎨 Применяем стили к Excel")
         apply_excel_styles(wb, excel_file)
+
         if report_data:
             from generators.summary_report import create_summary_sheet
+            logger.info(f"📈 Добавляем summary report")
             create_summary_sheet(wb, report_data)
 
+        logger.info(f"💾 Сохраняем финальный файл: {excel_file}")
         wb.save(excel_file)
+        logger.info(f"✅ Файл успешно сохранен: {excel_file}")
 
         if os.path.exists(temp_file):
             os.remove(temp_file)
+            logger.info(f"🗑️ Временный файл удален")
 
-        logger.info(f"Прогресс сохранен в {excel_file}")
+        logger.info(f"🎉 Excel файл полностью сохранен и готов!")
         return True
+
     except Exception as e:
-        logger.error(f"Ошибка сохранения Excel файла: {str(e)}")
+        logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА сохранения Excel: {str(e)}")
+        logger.exception("Полный traceback:")
         return False
 
 
