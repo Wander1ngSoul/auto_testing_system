@@ -73,28 +73,28 @@ def get_git_version():
         logger.warning(f"Не удалось получить версию из git: {e}")
         return "unknown"
 
-def rename_file_with_version_and_time(original_path):
-    if not os.path.exists(original_path):
-        logger.warning(f"Файл для переименования не существует: {original_path}")
-        return original_path
-
-    try:
-        directory = os.path.dirname(original_path)
-        filename = os.path.basename(original_path)
-        name, ext = os.path.splitext(filename)
-
-        version = get_git_version()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        new_filename = f"{name}_v{version}_{timestamp}{ext}"
-        new_path = os.path.join(directory, new_filename)
-
-        os.rename(original_path, new_path)
-        logger.info(f"Файл переименован: {new_path}")
-        return new_path
-    except Exception as e:
-        logger.error(f"Ошибка переименования файла {original_path}: {e}")
-        return original_path
+# def rename_file_with_version_and_time(original_path):
+#     if not os.path.exists(original_path):
+#         logger.warning(f"Файл для переименования не существует: {original_path}")
+#         return original_path
+#
+#     try:
+#         directory = os.path.dirname(original_path)
+#         filename = os.path.basename(original_path)
+#         name, ext = os.path.splitext(filename)
+#
+#         version = get_git_version()
+#         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#
+#         new_filename = f"{name}_v{version}_{timestamp}{ext}"
+#         new_path = os.path.join(directory, new_filename)
+#
+#         os.rename(original_path, new_path)
+#         logger.info(f"Файл переименован: {new_path}")
+#         return new_path
+#     except Exception as e:
+#         logger.error(f"Ошибка переименования файла {original_path}: {e}")
+#         return original_path
 
 APP_VERSION = get_git_version()
 

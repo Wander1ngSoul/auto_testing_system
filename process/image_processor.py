@@ -27,8 +27,11 @@ class ImageProcessor:
 
             original_name = os.path.basename(original_excel)
             name_without_ext = os.path.splitext(original_name)[0]
+
+            version = get_git_version()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            copy_excel_file = os.path.join(target_dir, f"{name_without_ext}_{timestamp}.xlsx")
+
+            copy_excel_file = os.path.join(target_dir, f"{name_without_ext}_v{version}_{timestamp}.xlsx")
 
             shutil.copy2(original_excel, copy_excel_file)
             logger.info(f"📋 Создана копия Excel:")

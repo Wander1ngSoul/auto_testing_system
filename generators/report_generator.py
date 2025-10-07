@@ -170,6 +170,7 @@ def generate_summary_report(processed_count, errors_count, skipped_count, total_
     logger.info(f"📁 Абсолютный путь: {os.path.abspath(excel_file)}")
 
     total_attempted = processed_count + errors_count
+    timing_totals = []
 
     try:
         logger.info(f"📊 ЗАГРУЖАЕМ ДАННЫЕ ДЛЯ РАСЧЕТА ТОЧНОСТИ ИЗ: {excel_file}")
@@ -194,6 +195,16 @@ def generate_summary_report(processed_count, errors_count, skipped_count, total_
             logger.info(f"📊 ЗАГРУЖЕНО ДАННЫХ: {len(df)} строк, {len(df.columns)} колонок")
             logger.info(f"📋 КОЛОНКИ: {list(df.columns)}")
 
+            # ПОЛУЧАЕМ TIMING TOTALS ИЗ DataFrame
+            if 'Timing Total' in df.columns:
+                timing_totals = df['Timing Total'].dropna().tolist()
+                logger.info(f"⏱️  Найдено {len(timing_totals)} значений Timing Total")
+                if timing_totals:
+                    avg_from_timing = sum(timing_totals) / len(timing_totals)
+                    logger.info(f"📊 Среднее время из Timing Total: {avg_from_timing:.2f} сек")
+            else:
+                logger.warning("⚠️ Колонка 'Timing Total' не найдена в DataFrame")
+
             required_cols = ['Indications Match', 'Series Match', 'Model Match', 'Rate Match', 'Overall Match']
             for col in required_cols:
                 if col in df.columns:
@@ -211,7 +222,7 @@ def generate_summary_report(processed_count, errors_count, skipped_count, total_
         accuracy_stats = create_empty_accuracy_stats()
 
     report = create_report_dict(processed_count, errors_count, skipped_count,
-                                total_attempted, total_time, accuracy_stats)
+                                total_attempted, total_time, accuracy_stats, timing_totals)
 
     print_report(report)
 
@@ -240,7 +251,90 @@ def create_empty_accuracy_stats():
     }
 
 
-def create_report_dict(processed, errors, skipped, attempted, total_time, accuracy_stats):
+# def generate_summary_report(processed_count, errors_count, skipped_count, total_time, excel_file):
+#     logger.info(f"🎯 ПОЛУЧЕН ФАЙЛ В generate_summary_report: {excel_file}")
+#     logger.info(f"📁 Абсолютный путь: {os.path.abspath(excel_file)}")
+#
+#     total_attempted = processed_count + errors_count
+#     timing_totals = []
+#
+#     try:
+#         logger.info(f"📊 ЗАГРУЖАЕМ ДАННЫЕ ДЛЯ РАСЧЕТА ТОЧНОСТИ ИЗ: {excel_file}")
+#
+#         df_full = pd.read_excel(excel_file, sheet_name='Image Data', header=None)
+#         logger.info(f"📋 ВСЕГО СТРОК В ФАЙЛЕ: {len(df_full)}")
+#
+#         header_row = None
+#         for i in range(min(10, len(df_full))):
+#             row_values = [str(x) for x in df_full.iloc[i].values if pd.notna(x)]
+#             logger.info(f"   Строка {i}: {row_values}")
+#             if 'Filename' in row_values:
+#                 header_row = i
+#                 logger.info(f"✅ НАЙДЕНЫ ЗАГОЛОВКИ В СТРОКЕ {i}")
+#                 break
+#
+#         if header_row is None:
+#             logger.error("❌ НЕ НАЙДЕНА СТРОКА С ЗАГОЛОВКАМИ")
+#             accuracy_stats = create_empty_accuracy_stats()
+#         else:
+#             df = pd.read_excel(excel_file, sheet_name='Image Data', header=header_row)
+#             logger.info(f"📊 ЗАГРУЖЕНО ДАННЫХ: {len(df)} строк, {len(df.columns)} колонок")
+#             logger.info(f"📋 КОЛОНКИ: {list(df.columns)}")
+#
+#             # ПОЛУЧАЕМ TIMING TOTALS ИЗ DataFrame
+#             if 'Timing Total' in df.columns:
+#                 timing_totals = df['Timing Total'].dropna().tolist()
+#                 logger.info(f"⏱️  Найдено {len(timing_totals)} значений Timing Total")
+#                 if timing_totals:
+#                     avg_from_timing = sum(timing_totals) / len(timing_totals)
+#                     logger.info(f"📊 Среднее время из Timing Total: {avg_from_timing:.2f} сек")
+#             else:
+#                 logger.warning("⚠️ Колонка 'Timing Total' не найдена в DataFrame")
+#
+#             required_cols = ['Indications Match', 'Series Match', 'Model Match', 'Rate Match', 'Overall Match']
+#             for col in required_cols:
+#                 if col in df.columns:
+#                     non_zero = (df[col] == 1).sum()
+#                     logger.info(f"   ✅ {col}: {non_zero} совпадений из {len(df)}")
+#                 else:
+#                     logger.error(f"   ❌ {col}: ОТСУТСТВУЕТ")
+#
+#             accuracy_stats = calculate_accuracy_stats(df)
+#
+#     except Exception as e:
+#         logger.error(f"❌ Ошибка загрузки данных для расчета точности: {str(e)}")
+#         import traceback
+#         logger.error(f"📋 Детали ошибки: {traceback.format_exc()}")
+#         accuracy_stats = create_empty_accuracy_stats()
+#
+#     # Передаем timing_totals в создание отчета
+#     report = create_report_dict(processed_count, errors_count, skipped_count,
+#                                 total_attempted, total_time, accuracy_stats, timing_totals)
+#
+#     print_report(report)
+#
+#     try:
+#         wb = openpyxl.load_workbook(excel_file)
+#         from generators.summary_report import create_summary_sheet
+#         create_summary_sheet(wb, report)
+#         wb.save(excel_file)
+#         logger.info("✅ Итоговый отчет добавлен в Excel файл")
+#     except Exception as e:
+#         logger.error(f"❌ Ошибка сохранения отчета в Excel: {str(e)}")
+#         import traceback
+#         logger.error(f"📋 Детали ошибки: {traceback.format_exc()}")
+#
+#     return report
+
+
+def create_report_dict(processed, errors, skipped, attempted, total_time, accuracy_stats, timing_totals=None):
+    if timing_totals and len(timing_totals) > 0:
+        average_time = sum(timing_totals) / len(timing_totals)
+        logger.info(f"✅ Среднее время рассчитано из Timing Total: {average_time:.2f} сек")
+    else:
+        average_time = total_time / attempted if attempted > 0 else 0
+        logger.info(f"⚠️ Среднее время рассчитано из общего времени: {average_time:.2f} сек")
+
     return {
         "total_images": attempted + skipped,
         "successfully_processed": processed,
@@ -248,7 +342,7 @@ def create_report_dict(processed, errors, skipped, attempted, total_time, accura
         "skipped": skipped,
         "success_rate": (processed / attempted) * 100 if attempted > 0 else 0,
         "total_time_seconds": total_time,
-        "average_time_per_image": total_time / attempted if attempted > 0 else 0,
+        "average_time_per_image": average_time,
         "images_per_minute": (attempted / total_time) * 60 if total_time > 0 else 0,
         "completion_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "accuracy": accuracy_stats
